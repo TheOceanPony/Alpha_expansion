@@ -30,11 +30,25 @@ def initial_labeling(img, C):
 
 
 @njit
+def initial_labeling_random(img, C):
+    
+    k_init = np.zeros(img.size, dtype=np.int32)
+    
+    img = img.flatten()
+
+    for p in range(0, img.size):
+
+        k_init[p] = np.random.choice(C, 1)[0]
+
+    return k_init
+
+
+@njit
 def indicator(k, k_, scale):
     if k != k_:
-        return scale
+        return scale+10
     else:
-        return 0
+        return 10
 
 
 @njit
@@ -44,20 +58,14 @@ def distance(k, k_, scale):
 
 @njit
 def init_g(img, labeling, a_i, scale):
-
+    
     h, w = img.shape[:2]
     img = img.flatten()
 
     g = np.zeros((h*w + 2, h*w + 2), dtype = np.int32)
 
-    # unary penalty k_i
-    for p in range(0, img.size):
-        g[0, p+1] = np.abs( labeling[p] - img[p])
-        #print(labeling[p], " | ", img[p])
-
-    # unary penalty a_i
-    for p in range(0, img.size):
-        g[p+1, -1] = np.abs( a_i - img[p]) 
+    g[0, 1:-1] = np.abs( a_i - img)
+    g[1:-1, -1] = np.abs( labeling - img)
 
     for i in range(h):
         for j in range(w):
@@ -65,20 +73,20 @@ def init_g(img, labeling, a_i, scale):
             # left
             if j > 0:
                 left = j - 1 + i*w + 1
-                g[index, left] = indicator( labeling[index], labeling[left], scale )
+                g[index, left] = indicator( labeling[index-1], labeling[left-1], scale )
             # right
             if j < w - 1:
                 right = j + 1 + i*w + 1
-                g[index, right] = indicator( labeling[index], labeling[right], scale )
+                g[index, right] = indicator( labeling[index-1], labeling[right-1], scale )
             # up
             if i > 0:
                 up = j + (i-1)*w + 1
-                g[index, up] = indicator( labeling[index], labeling[up], scale )
+                g[index, up] = indicator( labeling[index-1], labeling[up-1], scale )
             # down
             if i < h - 1:
                 down = j + (i+1)*w + 1
-                g[index, down] = indicator( labeling[index], labeling[down], scale )
-
+                g[index, down] = indicator( labeling[index-1], labeling[down-1], scale )
+                
     return g
 
 
@@ -201,7 +209,11 @@ def Ford_Falkerson(img, g):
     
     res = np.zeros((img.size), dtype=np.uint8)
     for v_ind in min_cut:
-        res[v_ind] = 1
+        if v_ind != 0 or v_ind != Vsize+1:
+            try:
+                res[v_ind-1] = 1
+            except:
+                print("Error",v_ind, Vsize)
     
 
     return res
@@ -211,8 +223,8 @@ def Ford_Falkerson(img, g):
 def translate_to_labeling(res, k_init, a_i):
     for i in range(0, res.size):
         if res[i] == 0:
-            res[i] = k_init[i]
+            res[i] = a_i 
         else:
-            res[i] = a_i
+            res[i] = k_init[i]
 
     return res
